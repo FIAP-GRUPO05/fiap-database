@@ -1,0 +1,7 @@
+# clusterName deve ser o mesmo usado no fiap-k8s.
+# postgresDb, postgresUser e postgresPassword devem bater com os do fiap-k8s,
+# que monta o SPRING_DATASOURCE_* da API.
+clusterName      = "my-cluster"
+postgresDb       = "oficina_db"
+postgresUser     = "oficina"
+postgresPassword = "troque-esta-senha"
