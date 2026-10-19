@@ -98,7 +98,7 @@ jobs:
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: config
-          scan-ref: .
+          scan-ref: infra/managed
           severity: HIGH,CRITICAL
           exit-code: '1'
       - name: 06 - Conectividade externa real
