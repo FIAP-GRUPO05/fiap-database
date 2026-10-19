@@ -35,6 +35,8 @@ prod e registros existentes nao sao sobrescritos. As definicoes em `infra/prod`
 documentam o laboratorio anterior e nao devem ser aplicadas na conta TWM.
 
 O workflow valida Terraform e seguranca. Depois de merges em branches protegidas,
-OIDC permite somente iniciar/acompanhar o bootstrap, que comprova a conexao TLS e
-os bancos dentro da VPC. Alteracoes estruturais do RDS ainda exigem o plano e o
-apply administrativo acima; o workflow nao possui permissao de destruir o banco.
+OIDC inicia e acompanha o bootstrap, que comprova a conexao TLS dentro da VPC.
+No merge em prod, antes do bootstrap, o papel `fiap-gh-terraform-fiap-database`
+executa plan/apply desta raiz. Ele aceita somente a branch prod. A instancia
+compartilhada permanece protegida contra exclusao no RDS; revise alteracoes de
+infraestrutura no PR. Veja [o fluxo completo](../../docs/CI-CD.md).
