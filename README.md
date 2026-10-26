@@ -6,7 +6,7 @@ Infraestrutura do PostgreSQL privado no Amazon RDS e bootstrap de bancos, usuár
 
 ## Tecnologias e requisitos
 
-Terraform 1.13+, Python 3.12, PostgreSQL/RDS, Secrets Manager e CodeBuild. AWS CLI autenticado é necessário para bootstrap administrativo. Os testes locais de scripts não exigem conta AWS.
+Terraform 1.13+, Python 3.12, PostgreSQL 17/RDS, Secrets Manager e CodeBuild. AWS CLI autenticado é necessário para bootstrap administrativo. Os testes locais de scripts não exigem conta AWS.
 
 ## Arquitetura deste componente
 
