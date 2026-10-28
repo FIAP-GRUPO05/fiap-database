@@ -47,7 +47,7 @@ A instância é compartilhada para reduzir custos, com bancos, usuários e segre
 
 ## Contratos e disponibilidade
 
-O banco não expõe API HTTP própria nem Swagger. O contrato relacional está no [DER e justificativa](https://github.com/FIAP-GRUPO05/fiap-docs/tree/main/database); o [Swagger da aplicação](https://github.com/FIAP-GRUPO05/fiap-application#api-e-urls-dos-ambientes) descreve as APIs consumidoras. O RDS foi desmontado para controle de custos; seu endpoint privado é obtido pelos outputs Terraform após reconstrução, nunca publicado como URL pública.
+O banco não expõe API HTTP própria nem Swagger. O contrato relacional está no [DER e justificativa](https://github.com/FIAP-GRUPO05/fiap-docs/tree/main/database); o [Swagger da aplicação](https://github.com/FIAP-GRUPO05/fiap-application#api-e-urls-dos-ambientes) descreve as APIs consumidoras. Em 28/10/2026, o RDS `fiap-shared-postgres` foi reconstruído com PostgreSQL 17.11, armazenamento criptografado e retenção de backups por sete dias. Os três ambientes passaram pelo bootstrap privado e pelos testes reais da aplicação. Seu endpoint privado é obtido pelos outputs Terraform, sem publicação como URL pública. `maintenance` bloqueia deploys da CI, mas mantém o banco ligado e sujeito a cobrança.
 
 ## Membros da equipe
 
