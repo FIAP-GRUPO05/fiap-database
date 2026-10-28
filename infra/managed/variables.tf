@@ -37,3 +37,13 @@ variable "multi_az" {
   type    = bool
   default = false
 }
+
+variable "engine_version" {
+  type        = string
+  default     = "17.11"
+  description = "PostgreSQL version validated with the application's Flyway 10.20.1; do not inherit a new major from AWS defaults."
+  validation {
+    condition     = can(regex("^17\\.[0-9]+$", var.engine_version))
+    error_message = "Use PostgreSQL 17.x validated with the application before changing major versions."
+  }
+}

@@ -43,6 +43,7 @@ resource "aws_vpc_security_group_ingress_rule" "from_lambda" {
 resource "aws_db_instance" "postgres" {
   identifier                      = "fiap-${var.environment}-postgres"
   engine                          = "postgres"
+  engine_version                  = var.engine_version
   instance_class                  = var.instance_class
   allocated_storage               = 20
   max_allocated_storage           = 100
