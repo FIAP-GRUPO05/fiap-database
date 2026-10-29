@@ -20,7 +20,7 @@ def application_secret(environment):
     try:
         value = secrets.get_secret_value(SecretId=name)["SecretString"]
         credentials = json.loads(value)
-        if "host" not in credentials:
+        if credentials.get("host") != os.environ["DB_HOST"]:
             credentials["host"] = os.environ["DB_HOST"]
             secrets.put_secret_value(SecretId=name, SecretString=json.dumps(credentials))
         return credentials
