@@ -1,0 +1,18 @@
+flowchart LR
+    GH[GitHub Actions / OIDC] -->|push em prod: plan/apply| TF[Terraform: infra/managed]
+    GH -->|push em develop, release/* e prod| CB
+    TF --> RDS
+    TF --> CB
+    subgraph VPC["VPC privada (sa-east-1)"]
+        subgraph SG["SG do RDS: 5432 liberada só para EKS, Lambda e CodeBuild"]
+            RDS[("RDS PostgreSQL 17 privado<br/>fiap-shared-postgres")]
+        end
+        EKS["API Java no EKS / Flyway"] -->|5432| RDS
+        Lambda["Lambda de autenticação"] -->|5432| RDS
+        CB["CodeBuild fiap-database-bootstrap"] -->|5432 TLS| RDS
+    end
+    RDS --> DEV[(oficina_develop)]
+    RDS --> HOM[(oficina_homol)]
+    RDS --> PROD[(oficina_prod)]
+    CB -->|cria/reconcilia| SM["Secrets Manager<br/>fiap/{env}/postgres, application, admin"]
+    RDS -.->|senha mestre gerenciada pelo RDS| SM

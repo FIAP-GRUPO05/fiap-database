@@ -11,16 +11,17 @@ Somente EKS, Lambda e o executor privado podem acessar a porta 5432.
 
 ## Aplicar e verificar
 
-```powershell
-$env:AWS_PROFILE = '<perfil-administrador>'
+```bash
+export AWS_PROFILE=<perfil-administrador>
 terraform init -backend-config=backend.hcl
 terraform plan
 terraform apply
-aws codebuild start-build --project-name fiap-database-bootstrap
+build_id=$(aws codebuild start-build --project-name fiap-database-bootstrap --query build.id --output text)
+python ../../.github/scripts/wait_codebuild.py "$build_id"
 ```
 
-O CodeBuild cria bancos, usuarios e segredos sem expor senhas. Use o ID retornado
-com `python ../../.github/scripts/wait_codebuild.py <id>` para aguardar o resultado.
+O CodeBuild cria bancos, usuarios e segredos sem expor senhas. O script
+`wait_codebuild.py` acompanha o build e falha se ele nao terminar com sucesso.
 As migracoes de tabelas continuam no Flyway da aplicacao. Execute o bootstrap
 novamente apos o primeiro deploy para criar o administrador de cada ambiente.
 

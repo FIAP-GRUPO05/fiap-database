@@ -10,23 +10,19 @@ Terraform 1.13+, Python 3.12, PostgreSQL 17/RDS, Secrets Manager e CodeBuild. AW
 
 ## Arquitetura deste componente
 
-```mermaid
-flowchart LR
-    TF[Terraform: infra/managed] --> RDS[(RDS PostgreSQL privado)]
-    Bootstrap[CodeBuild: bootstrap de bancos] --> RDS
-    Bootstrap --> SM[Secrets Manager por ambiente]
-    API[API Java no EKS / Flyway] --> RDS
-    Lambda[Lambda de autenticacao] --> RDS
-    RDS --> DEV[oficina_develop]
-    RDS --> HOM[oficina_homol]
-    RDS --> PROD[oficina_prod]
-```
+Há uma única instância RDS compartilhada, com bancos lógicos, usuários e segredos separados por ambiente, por decisão de custo ([justificativa](https://github.com/FIAP-GRUPO05/fiap-docs/blob/main/database/justificativa-formal-postgres.md); [modelo de dados](https://github.com/FIAP-GRUPO05/fiap-docs/blob/main/database/README.md)).
+
+![Arquitetura do fiap-database](docs/arquitetura.png)
+
+Fonte editável: [`docs/arquitetura.mmd`](docs/arquitetura.mmd).
+
+> ⚠️ **Legado:** `infra/prod/` e `k8s/` pertencem ao laboratório anterior (PostgreSQL em pod no Kubernetes, `us-east-1`). Não são usados pelo pipeline e **não devem ser aplicados**. A raiz ativa é `infra/managed`.
 
 ## Validar localmente
 
 Na raiz deste repositório:
 
-```powershell
+```bash
 terraform -chdir=infra/managed fmt -check
 terraform -chdir=infra/managed init -backend=false -input=false
 terraform -chdir=infra/managed validate
@@ -37,13 +33,59 @@ Esses comandos validam código, sem criar RDS. Para desenvolvimento com banco lo
 
 ## Deploy e ambientes
 
-O fluxo é `feature/* → develop → release/vX.Y.Z → prod → main`. Após o push da feature e o sucesso da CI, o PR é aberto automaticamente; os merges são manuais. Os próximos PRs são gerados após a promoção aprovada. `develop`, `release/*` e `prod` publicam no ambiente correspondente quando a infraestrutura está `active`; `prod → main` apenas consolida a versão.
+O fluxo é `feature/* → develop → release/vX.Y.Z → prod → main`. Após o push da feature e o sucesso da CI, o PR é aberto automaticamente; os merges são manuais. Os próximos PRs são gerados após a promoção aprovada.
 
-Em `destroyed`/`destroying`, deploys e promoções ficam bloqueados. Em `maintenance`, a CI permite validar e promover código, mantendo os deploys bloqueados. O bootstrap administrativo usa AWS CLI; a operação diária do CI usa OIDC e não exige credenciais AWS de cada integrante.
+O `terraform apply` da instância RDS compartilhada roda **somente no push em `prod`**. Em `develop` e `release/*`, o job de deploy apenas inicia, por OIDC, o CodeBuild `fiap-database-bootstrap` (`infra/managed/bootstrap_databases.py`), que cria ou reconcilia bancos lógicos, roles e segredos, e aguarda seu resultado:
 
-A raiz ativa é `infra/managed`; `infra/prod` pertence ao laboratório anterior. O primeiro provisionamento depende da plataforma do `fiap-k8s`. Na publicação de `prod`, a CI aplica o Terraform e inicia o bootstrap privado; nos ambientes, acompanha o CodeBuild e valida conexão TLS. O bootstrap é executado novamente após as primeiras migrations para criar os administradores. Após reconstrução do RDS, atualiza o host dos segredos restaurados, preservando usuário e senha.
+| Branch (push) | Ambiente | Banco lógico | O que a CI executa |
+|---|---|---|---|
+| `develop` | develop | `oficina_develop` | Bootstrap privado (CodeBuild) |
+| `release/vX.Y.Z` | homol (homologação) | `oficina_homol` | Bootstrap privado (CodeBuild) |
+| `prod` | prod (produção) | `oficina_prod` | `terraform plan/apply` de `infra/managed` + bootstrap privado |
+| `main` | — | — | Nada é publicado; `prod → main` apenas consolida a versão |
 
-A instância é compartilhada para reduzir custos, com bancos, usuários e segredos distintos. Backups e proteção contra exclusão são configurados no Terraform. A desmontagem segue o pedido protegido `feature/destroy-infra-aws` do `fiap-k8s`, com aprovação e relatório.
+Cada execução do bootstrap percorre os três ambientes (`develop`, `homol`, `prod`) e é idempotente: cria apenas o que falta e preserva os segredos existentes. O nome do banco e do usuário segue `oficina_<ambiente>`.
+
+Os deploys só rodam com a infraestrutura `active`. Em `destroyed`/`destroying`, deploys e promoções ficam bloqueados. Em `maintenance`, a CI permite validar e promover código, mantendo os deploys bloqueados. A operação diária do CI usa OIDC e não exige credenciais AWS de cada integrante; o provisionamento manual abaixo usa AWS CLI com perfil administrativo.
+
+O primeiro provisionamento depende da plataforma do `fiap-k8s` (VPC, sub-redes privadas e security groups do EKS e da Lambda são lidos do estado remoto `fiap/platform-shared.tfstate`). O bootstrap é executado novamente após as primeiras migrations para criar os administradores. Após reconstrução do RDS, ele atualiza o host dos segredos restaurados, preservando usuário e senha.
+
+Backups (sete dias) e proteção contra exclusão são configurados no Terraform. A desmontagem segue o pedido protegido `feature/destroy-infra-aws` do `fiap-k8s`, com aprovação e relatório.
+
+## Provisionamento manual
+
+Na raiz deste repositório, com AWS CLI autenticado na conta `456687462806` (`sa-east-1`):
+
+```bash
+export AWS_PROFILE=<perfil-administrador>
+terraform -chdir=infra/managed init -backend-config=backend.hcl
+terraform -chdir=infra/managed plan
+terraform -chdir=infra/managed apply
+
+build_id=$(aws codebuild start-build --project-name fiap-database-bootstrap --query build.id --output text)
+python .github/scripts/wait_codebuild.py "$build_id"
+```
+
+O estado remoto fica em `s3://fiap-tfstate-456687462806/fiap/database-shared.tfstate` (`backend.hcl`); as variáveis vêm de `shared.auto.tfvars`. Os comandos do CodeBuild são os mesmos usados pela CI; os logs ficam em `/aws/codebuild/fiap-database-bootstrap`.
+
+## Outputs e segredos
+
+Outputs de `infra/managed` (`terraform -chdir=infra/managed output`):
+
+| Output | Conteúdo |
+|---|---|
+| `db_address` / `db_port` | Endpoint privado da instância e porta (5432) |
+| `db_name` / `db_username` | Banco inicial (`oficina_prod`) e usuário mestre (`oficina`) |
+| `master_secret_arn` | ARN do segredo da senha mestre |
+| `db_security_group_id` | Security group do RDS |
+
+A senha mestre não é definida no Terraform: ela é gerada e gerenciada pelo próprio RDS (`manage_master_user_password = true`) e guardada no Secrets Manager; o bootstrap a lê pelo `master_secret_arn`. Para cada ambiente (`develop`, `homol`, `prod`), o bootstrap cria:
+
+| Segredo | Conteúdo |
+|---|---|
+| `fiap/<ambiente>/postgres` | `username`, `password`, `dbname` e `host` do usuário `oficina_<ambiente>` |
+| `fiap/<ambiente>/application` | `jwt_secret` da aplicação |
+| `fiap/<ambiente>/admin` | `email` e `password` do administrador (criado após as migrations Flyway; no banco fica só o hash bcrypt) |
 
 ## Contratos e disponibilidade
 
